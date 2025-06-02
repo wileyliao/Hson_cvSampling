@@ -1,6 +1,6 @@
 import os
 import csv
-import datetime
+from datetime import datetime
 import base64
 import uuid
 from flask_cors import CORS
@@ -13,6 +13,10 @@ CORS(app)
 UPLOAD_DIR = 'uploads'
 IMAGE_DIR = os.path.join(UPLOAD_DIR, 'images')
 HISTORY_CSV = os.path.join(UPLOAD_DIR, 'history.csv')
+
+FINETUNE_DIR = 'finetune'
+F_IMAGE_DIR = os.path.join(FINETUNE_DIR, 'images')
+FINETUNE_CSV = os.path.join(FINETUNE_DIR, 'finetune.csv')
 
 real = [
     "杜仲(炒)飲片(C0022-1)",
@@ -35,6 +39,13 @@ if not os.path.exists(HISTORY_CSV):
     with open(HISTORY_CSV, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["id", "filename", "label", "status", "uploaded_at", "reviewed_at", "reason"])
+
+# 初始化資料夾與 CSV 檔
+os.makedirs(F_IMAGE_DIR, exist_ok=True)
+if not os.path.exists(FINETUNE_CSV):
+    with open(FINETUNE_CSV, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "filename", "predict", "groundtruth", "judgment", "time"])
 
 # 讀取 CSV 內容
 def read_csv():
@@ -314,34 +325,56 @@ def get_history():
 @app.route('/ai_respond', methods=['POST'])
 def ai_classifier_main():
     """
-    POST:
+    接收圖片並儲存至 finetune/images，以唯一檔名儲存，並記錄模型預測至 finetune.csv。
+    輸入：
         {
-            "filename": "image file name"
-            "bs64": "/9j/4AAQSkZJRgABAQAAAQABAAD..."
-        }
-
-    Return:
-        {
-            "result": "bird"
+            "filename": "image_name.jpg",
+            "bs64": "base64string"
         }
     """
-    bs64 = request.json.get("bs64")
     try:
+        data = request.json
+        original_filename = data.get("filename")
+        bs64 = data.get("bs64")
+
+        # 生成唯一檔名（與 /upload POST 一致）
+        unique_id = str(uuid.uuid4())[:4]
+        filename = f"{os.path.splitext(original_filename)[0]}_{unique_id}.jpg"
+        save_path = os.path.join(F_IMAGE_DIR, filename)
+
+        # 儲存圖片
+        image_data = base64.b64decode(bs64)
+        with open(save_path, "wb") as f:
+            f.write(image_data)
+
+        # 模型預測
         response = requests.post(
-            "http://tcm_vision:3001/tcm_vision",
+            "https://www.kutech.tw:3000/tcm_vision",
             json={"bs64": bs64}
         )
+        result = response.json().get("result")
 
-        return jsonify(response.json()), response.status_code
+        # 取得新 id
+        if os.path.exists(FINETUNE_CSV):
+            with open(FINETUNE_CSV, 'r', newline='', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                max_id = max([int(row["id"]) for row in reader], default=0)
+        else:
+            max_id = 0
+        new_id = max_id + 1
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        with open(FINETUNE_CSV, 'a', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f)
+            writer.writerow([str(new_id), filename, result, "", "", now])
+
+        return jsonify({"result": result, "filename": filename}), 200
+
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-    # fake = {
-    #     "result": "人參"
-    # }
-    # return jsonify(fake), 200
 
 @app.route('/ai_respond', methods=['GET'])
 def ai_classifier_label():
@@ -361,21 +394,48 @@ def ai_classifier_label():
 @app.route('/ai_respond_judge', methods=['POST'])
 def ai_classifier_ground_truth():
     """
-    POST:
+    接收使用者標記回饋，更新 finetune.csv 中對應紀錄的 groundtruth 與 judgment。
+    輸入：
         {
+            "filename": "xxx.jpg",
             "judgment": "True/False",
-            "label": "bird" # False only
+            "groundtruth": "正確類別名稱"   # False 時才填
         }
     """
-    data = request.get_json()
-    print("收到的 JSON：", data)
+    try:
+        data = request.json
+        filename = data.get("filename")
+        judgment = data.get("judgment")
+        groundtruth = data.get("groundtruth", "")
 
-    fake = {
-        "list": real
-    }
+        updated = False
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    return jsonify(fake), 200
+        with open(FINETUNE_CSV, 'r', newline='', encoding='utf-8-sig') as f:
+            rows = list(csv.DictReader(f))
+
+        for row in rows:
+            if row["filename"] == filename:
+                row["judgment"] = judgment
+                row["groundtruth"] = groundtruth
+                row["time"] = now
+                updated = True
+                break
+
+        if not updated:
+            return jsonify({"error": f"{filename} not found in finetune.csv"}), 404
+
+        with open(FINETUNE_CSV, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=["id", "filename", "predict", "groundtruth", "judgment", "time"])
+            writer.writeheader()
+            writer.writerows(rows)
+
+        return jsonify({"message": "Judgment saved"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
