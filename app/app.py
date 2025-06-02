@@ -14,6 +14,19 @@ UPLOAD_DIR = 'uploads'
 IMAGE_DIR = os.path.join(UPLOAD_DIR, 'images')
 HISTORY_CSV = os.path.join(UPLOAD_DIR, 'history.csv')
 
+real = [
+    "杜仲(炒)飲片(C0022-1)",
+    "桑葉飲片(C0035-1)",
+    "生地黃飲片(C0012-1)",
+    "白朮(炒)飲片(C0013-1)",
+    "白芍(炒)飲片(C0014-1)",
+    "白芨飲片(C0076-1)",
+    "白芷飲片(C0015-1)",
+    "白茅根飲片(C0063-1)",
+    "黃芩飲片(C0044-1)"
+]
+
+
 # 確保目錄存在
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
@@ -299,7 +312,7 @@ def get_history():
 
 
 @app.route('/ai_respond', methods=['POST'])
-def ai_classifier():
+def ai_classifier_main():
     """
     POST:
         {
@@ -312,18 +325,41 @@ def ai_classifier():
             "result": "bird"
         }
     """
+    bs64 = request.json.get("bs64")
+    try:
+        response = requests.post(
+            "http://tcm_vision:3001/tcm_vision",
+            json={"bs64": bs64}
+        )
+
+        return jsonify(response.json()), response.status_code
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+    # fake = {
+    #     "result": "人參"
+    # }
+    # return jsonify(fake), 200
 
 @app.route('/ai_respond', methods=['GET'])
-def ai_classifier():
+def ai_classifier_label():
     """
         {
             "list": ["med_01", "med_02", "med_03]
         }
     """
 
+    fake = {
+        "list": real
+    }
+
+    return jsonify(fake), 200
+
 
 @app.route('/ai_respond_judge', methods=['POST'])
-def ai_classifier():
+def ai_classifier_ground_truth():
     """
     POST:
         {
@@ -331,6 +367,15 @@ def ai_classifier():
             "label": "bird" # False only
         }
     """
+    data = request.get_json()
+    print("收到的 JSON：", data)
+
+    fake = {
+        "list": real
+    }
+
+    return jsonify(fake), 200
+
 
 if __name__ == '__main__':
     app.run(debug=True)
