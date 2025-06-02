@@ -397,16 +397,17 @@ def ai_classifier_ground_truth():
     接收使用者標記回饋，更新 finetune.csv 中對應紀錄的 groundtruth 與 judgment。
     輸入：
         {
-            "filename": "xxx.jpg",
+            "label": "正確類別名稱" ,  # False 時才填
             "judgment": "True/False",
-            "groundtruth": "正確類別名稱"   # False 時才填
+            "filename": "檔名"
         }
     """
     try:
         data = request.json
-        filename = data.get("filename")
+
         judgment = data.get("judgment")
-        groundtruth = data.get("groundtruth", "")
+        label = data.get("label", "")
+        filename = data.get("filename", "")
 
         updated = False
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -417,7 +418,7 @@ def ai_classifier_ground_truth():
         for row in rows:
             if row["filename"] == filename:
                 row["judgment"] = judgment
-                row["groundtruth"] = groundtruth
+                row["groundtruth"] = label
                 row["time"] = now
                 updated = True
                 break
