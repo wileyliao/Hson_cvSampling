@@ -1,6 +1,7 @@
 import os
 import csv
 from datetime import datetime
+from collections import defaultdict
 import base64
 import uuid
 from flask_cors import CORS
@@ -254,6 +255,19 @@ def get_pending_images():
             })
 
     return jsonify({"images": pending_images}), 200
+
+
+@app.route('/overview', methods=['GET'])
+def get_overview():
+    records = read_csv()
+    label_counts = defaultdict(int)
+
+    for r in records:
+        label_counts[r["label"]] += 1
+
+    return jsonify({"label_counts": dict(label_counts)}), 200
+
+
 
 # 3️⃣ 取得歷史紀錄 API
 @app.route('/history', methods=['GET'])
