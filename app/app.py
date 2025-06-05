@@ -259,6 +259,16 @@ def get_pending_images():
 
 @app.route('/overview', methods=['GET'])
 def get_overview():
+    """
+    回傳格式範例：
+    {
+        "label_counts": {
+            "bird": 10,
+            "fish": 4,
+            "tree": 6
+        }
+    }
+    """
     records = read_csv()
     label_counts = defaultdict(int)
 
